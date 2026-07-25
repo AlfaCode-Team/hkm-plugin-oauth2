@@ -1,0 +1,15 @@
+{
+    "name": "alfacode-team/hkm-plugin-oauth2",
+    "description": "HKM Kernel plugin providing 'oauth.server'.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["hkm-kernel", "plugin", "php", "oauth.server"],
+    "require": {
+        "php": ">=8.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "Plugins\\OAuth2\\": ""
+        }
+    }
+}
