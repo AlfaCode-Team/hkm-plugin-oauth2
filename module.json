@@ -1,6 +1,7 @@
 {
   "name": "oauth2",
   "version": "1.0.0",
+  "kernel": "^1.0",
   "solves": "oauth.server",
   "type": "module",
 
