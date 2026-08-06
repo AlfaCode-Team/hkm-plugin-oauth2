@@ -9,13 +9,13 @@
 $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= $e(lang_locale()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <?php /* Device-code entry is a transactional auth surface — never indexable. */ ?>
     <meta name="robots" content="noindex, nofollow">
-    <title>Connect a device</title>
+    <title><?= $e(trans('oauth2::oauth.device.title')) ?></title>
     <style>
         body { font-family: system-ui, sans-serif; background: #f5f5f7; margin: 0; padding: 2rem; }
         .card { max-width: 420px; margin: 4rem auto; background: #fff; border-radius: 12px;
@@ -32,8 +32,8 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 </head>
 <body>
     <div class="card">
-        <h1>Connect a device</h1>
-        <p>Enter the code shown on your device.</p>
+        <h1><?= $e(trans('oauth2::oauth.device.title')) ?></h1>
+        <p><?= $e(trans('oauth2::oauth.device.prompt')) ?></p>
 
         <?php if ($message !== ''): ?>
             <div class="msg"><?= $e($message) ?></div>
@@ -41,10 +41,10 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 
         <form method="post" action="/oauth/device">
             <input type="hidden" name="_csrf_token" value="<?= $e($csrf) ?>">
-            <input type="text" name="user_code" value="<?= $e($userCode) ?>" placeholder="XXXX-XXXX" autofocus>
+            <input type="text" name="user_code" value="<?= $e($userCode) ?>" placeholder="<?= $e(trans('oauth2::oauth.device.placeholder')) ?>" autofocus>
             <div class="actions">
-                <button class="deny" type="submit" name="action" value="deny">Deny</button>
-                <button class="approve" type="submit" name="action" value="approve">Approve</button>
+                <button class="deny" type="submit" name="action" value="deny"><?= $e(trans('oauth2::oauth.device.deny')) ?></button>
+                <button class="approve" type="submit" name="action" value="approve"><?= $e(trans('oauth2::oauth.device.approve')) ?></button>
             </div>
         </form>
     </div>

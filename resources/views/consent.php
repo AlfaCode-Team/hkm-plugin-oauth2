@@ -10,13 +10,13 @@
 $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= $e(lang_locale()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <?php /* Consent screens are transactional auth surfaces — never indexable. */ ?>
     <meta name="robots" content="noindex, nofollow">
-    <title>Authorize <?= $e($clientName) ?></title>
+    <title><?= $e(trans('oauth2::oauth.consent.title', ['client' => $clientName])) ?></title>
     <style>
         body { font-family: system-ui, sans-serif; background: #f5f5f7; margin: 0; padding: 2rem; }
         .card { max-width: 420px; margin: 4rem auto; background: #fff; border-radius: 12px;
@@ -33,11 +33,11 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 </head>
 <body>
     <div class="card">
-        <h1>Authorize <?= $e($clientName) ?></h1>
-        <p><strong><?= $e($clientName) ?></strong> is requesting access to your account.</p>
+        <h1><?= $e(trans('oauth2::oauth.consent.title', ['client' => $clientName])) ?></h1>
+        <p><?= trans('oauth2::oauth.consent.request', ['client' => '<strong>' . $e($clientName) . '</strong>']) ?></p>
 
         <?php if (!empty($scopes)): ?>
-            <p>It will be able to:</p>
+            <p><?= $e(trans('oauth2::oauth.consent.abilities')) ?></p>
             <ul>
                 <?php foreach ($scopes as $scope): ?>
                     <li><?= $e($scope) ?></li>
@@ -49,8 +49,8 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
             <input type="hidden" name="_csrf_token" value="<?= $e($csrf) ?>">
             <input type="hidden" name="authz_id" value="<?= $e($authzId) ?>">
             <div class="actions">
-                <button class="deny" type="submit" name="action" value="deny">Deny</button>
-                <button class="approve" type="submit" name="action" value="approve">Allow</button>
+                <button class="deny" type="submit" name="action" value="deny"><?= $e(trans('oauth2::oauth.consent.deny')) ?></button>
+                <button class="approve" type="submit" name="action" value="approve"><?= $e(trans('oauth2::oauth.consent.allow')) ?></button>
             </div>
         </form>
     </div>
