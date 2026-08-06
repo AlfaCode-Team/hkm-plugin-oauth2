@@ -46,7 +46,7 @@ final class DeviceVerificationController extends ViewController
         $request  = $this->resolveRequest();
         $identity = $request->identity();
         if ($identity === null || $identity->isGuest()) {
-            return Response::unauthorized('Login required.');
+            return Response::unauthorized(trans('oauth2::oauth.device.login_required'));
         }
 
         $userCode = strtoupper(trim((string) $request->input('user_code')));
@@ -56,17 +56,17 @@ final class DeviceVerificationController extends ViewController
             return $this->view('oauth2::device', [
                 'csrf'     => $this->_csrfToken(),
                 'userCode' => $userCode,
-                'message'  => 'That code is invalid, expired, or already used.',
+                'message'  => trans('oauth2::oauth.device.invalid'),
             ], status: 422);
         }
 
         $approved = in_array($request->input('action'), ['approve', 'allow'], true);
         if ($approved) {
             $this->devices->authorize($device->id, $identity->userId);
-            $msg = 'Device approved. You can return to your device.';
+            $msg = trans('oauth2::oauth.device.approved');
         } else {
             $this->devices->deny($device->id);
-            $msg = 'Device denied.';
+            $msg = trans('oauth2::oauth.device.denied');
         }
 
         return $this->view('oauth2::device', [

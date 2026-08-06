@@ -10,12 +10,12 @@
 $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= $e(lang_locale()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>OAuth2 Admin</title>
+    <title><?= $e(trans('oauth2::oauth.admin.title')) ?></title>
     <style>
         :root {
             --bg:#f6f7f9; --card:#fff; --fg:#0f172a; --muted:#64748b; --border:#e2e8f0;
@@ -116,7 +116,7 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
         <div class="brand">
             <div class="logo">🛡</div>
             <div>
-                <h1>OAuth2 Admin</h1>
+                <h1><?= $e(trans('oauth2::oauth.admin.title')) ?></h1>
                 <p class="sub">Tenant-wide administration — all clients, scopes and authorized grants.</p>
             </div>
         </div>
@@ -135,15 +135,15 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
     <div class="banner" id="banner"></div>
 
     <div class="tabs">
-        <button class="tab active" data-tab="clients" onclick="showTab('clients')">Clients</button>
-        <button class="tab" data-tab="scopes" onclick="showTab('scopes')">Scopes</button>
-        <button class="tab" data-tab="grants" onclick="showTab('grants')">Grants</button>
+        <button class="tab active" data-tab="clients" onclick="showTab('clients')"><?= $e(trans('oauth2::oauth.admin.tab_clients')) ?></button>
+        <button class="tab" data-tab="scopes" onclick="showTab('scopes')"><?= $e(trans('oauth2::oauth.admin.col_scopes')) ?></button>
+        <button class="tab" data-tab="grants" onclick="showTab('grants')"><?= $e(trans('oauth2::oauth.admin.tab_grants')) ?></button>
     </div>
 
     <!-- Clients -->
     <section data-panel="clients" class="card">
         <div class="card-head">
-            <div><h2>Clients</h2><p>Every OAuth client registered in this tenant.</p></div>
+            <div><h2><?= $e(trans('oauth2::oauth.admin.tab_clients')) ?></h2><p><?= $e(trans('oauth2::oauth.admin.clients_intro')) ?></p></div>
             <div style="display:flex;gap:.5rem">
                 <button class="btn primary sm" onclick="openCreate()">+ New client</button>
                 <button class="btn sm" onclick="loadClients()">↻</button>
@@ -151,8 +151,8 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
         </div>
         <div class="card-body">
             <table>
-                <thead><tr><th>Name</th><th>client_id</th><th>Owner</th><th>Type</th><th>Scopes</th><th>Status</th><th></th></tr></thead>
-                <tbody id="clients-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+                <thead><tr><th><?= $e(trans('oauth2::oauth.admin.col_name')) ?></th><th>client_id</th><th><?= $e(trans('oauth2::oauth.admin.col_owner')) ?></th><th><?= $e(trans('oauth2::oauth.admin.col_type')) ?></th><th><?= $e(trans('oauth2::oauth.admin.col_scopes')) ?></th><th><?= $e(trans('oauth2::oauth.admin.col_status')) ?></th><th></th></tr></thead>
+                <tbody id="clients-body"><tr><td colspan="7" class="empty"><?= $e(trans('oauth2::oauth.admin.loading')) ?></td></tr></tbody>
             </table>
         </div>
     </section>
@@ -160,7 +160,7 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
     <!-- Scopes -->
     <section data-panel="scopes" class="card" style="display:none">
         <div class="card-head">
-            <div><h2>Scope catalogue</h2><p>Grantable scopes shown on consent and validated at /authorize.</p></div>
+            <div><h2><?= $e(trans('oauth2::oauth.admin.scopes_title')) ?></h2><p>Grantable scopes shown on consent and validated at /authorize.</p></div>
             <button class="btn sm" onclick="loadScopes()">↻</button>
         </div>
         <div class="card-body">
@@ -169,20 +169,20 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
                 <div class="field" style="flex:1"><label>description</label><input id="scope-desc" placeholder="Read your data"></div>
                 <button class="btn primary" onclick="addScope()">+ Add</button>
             </div>
-            <div class="card" style="box-shadow:none"><div id="scopes-body"><div class="empty">Loading…</div></div></div>
+            <div class="card" style="box-shadow:none"><div id="scopes-body"><div class="empty"><?= $e(trans('oauth2::oauth.admin.loading')) ?></div></div></div>
         </div>
     </section>
 
     <!-- Grants -->
     <section data-panel="grants" class="card" style="display:none">
         <div class="card-head">
-            <div><h2>Authorized grants</h2><p>Every active refresh-token grant across all users.</p></div>
+            <div><h2><?= $e(trans('oauth2::oauth.admin.grants_title')) ?></h2><p><?= $e(trans('oauth2::oauth.admin.grants_intro')) ?></p></div>
             <button class="btn sm" onclick="loadGrants()">↻</button>
         </div>
         <div class="card-body">
             <table>
                 <thead><tr><th>grant id</th><th>client</th><th>user</th><th>scopes</th><th>expires</th><th></th></tr></thead>
-                <tbody id="grants-body"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+                <tbody id="grants-body"><tr><td colspan="6" class="empty"><?= $e(trans('oauth2::oauth.admin.loading')) ?></td></tr></tbody>
             </table>
         </div>
     </section>
@@ -191,13 +191,13 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 <!-- Create client modal -->
 <div class="modal-bg" id="create-bg">
     <div class="modal">
-        <div class="modal-head"><h3>Register OAuth client</h3><p>Created in the current tenant. Confidential secrets are shown once.</p></div>
+        <div class="modal-head"><h3><?= $e(trans('oauth2::oauth.admin.register_title')) ?></h3><p>Created in the current tenant. Confidential secrets are shown once.</p></div>
         <div class="modal-body">
-            <div class="field"><label>Name</label><input id="nc-name" value="Admin-created client"></div>
+            <div class="field"><label><?= $e(trans('oauth2::oauth.admin.col_name')) ?></label><input id="nc-name" value="Admin-created client"></div>
             <div class="field"><label>redirect_uri</label><input id="nc-redirect" class="mono"></div>
-            <div class="field"><label>Scopes (space-separated)</label><input id="nc-scopes" class="mono" value="">
-                <span class="muted" style="font-size:.72rem">Every scope must exist in the catalogue.</span></div>
-            <div class="field"><label>Grant types</label>
+            <div class="field"><label><?= $e(trans('oauth2::oauth.admin.field_scopes')) ?></label><input id="nc-scopes" class="mono" value="">
+                <span class="muted" style="font-size:.72rem"><?= $e(trans('oauth2::oauth.admin.scopes_hint')) ?></span></div>
+            <div class="field"><label><?= $e(trans('oauth2::oauth.admin.field_grants')) ?></label>
                 <div id="nc-grants" style="display:grid;grid-template-columns:1fr 1fr;gap:.35rem;font-size:.82rem">
                     <label><input type="checkbox" value="authorization_code" checked> authorization_code</label>
                     <label><input type="checkbox" value="refresh_token" checked> refresh_token</label>
@@ -206,11 +206,11 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
                     <label style="grid-column:1/-1"><input type="checkbox" value="urn:ietf:params:oauth:grant-type:device_code"> device_code</label>
                 </div>
             </div>
-            <label class="switch"><span>Public client (PKCE) — off = confidential</span><input type="checkbox" id="nc-public" checked></label>
+            <label class="switch"><span><?= $e(trans('oauth2::oauth.admin.field_public')) ?></span><input type="checkbox" id="nc-public" checked></label>
         </div>
         <div class="modal-foot">
-            <button class="btn" onclick="closeCreate()">Cancel</button>
-            <button class="btn primary" id="nc-submit" onclick="createClient()">Create client</button>
+            <button class="btn" onclick="closeCreate()"><?= $e(trans('oauth2::oauth.admin.cancel')) ?></button>
+            <button class="btn primary" id="nc-submit" onclick="createClient()"><?= $e(trans('oauth2::oauth.admin.create')) ?></button>
         </div>
     </div>
 </div>
@@ -276,7 +276,7 @@ async function loadClients() {
     const body = document.getElementById('clients-body');
     try {
         const clients = pick(await api('/oauth/admin/clients'), 'clients');
-        if (!clients.length) { body.innerHTML = '<tr><td colspan="7" class="empty">No clients yet.</td></tr>'; return; }
+        if (!clients.length) { body.innerHTML = '<tr><td colspan="7" class="empty"><?= $e(trans('oauth2::oauth.admin.empty_clients')) ?></td></tr>'; return; }
         body.innerHTML = clients.map(c => `
             <tr>
                 <td><strong>${esc(c.name)}</strong></td>
@@ -334,7 +334,7 @@ async function loadScopes() {
     const el = document.getElementById('scopes-body');
     try {
         const scopes = pick(await api('/oauth/admin/scopes'), 'scopes');
-        if (!scopes.length) { el.innerHTML = '<div class="empty">No scopes registered.</div>'; return; }
+        if (!scopes.length) { el.innerHTML = '<div class="empty"><?= $e(trans('oauth2::oauth.admin.empty_scopes')) ?></div>'; return; }
         el.innerHTML = scopes.map(s => `<div class="list-row">
             <span><code>${esc(s.id)}</code> <span class="muted">— ${esc(s.description || 'no description')}</span></span>
             <button class="link danger" onclick="delScope('${esc(s.id)}')">delete</button></div>`).join('');
@@ -359,7 +359,7 @@ async function loadGrants() {
     const body = document.getElementById('grants-body');
     try {
         const tokens = pick(await api('/oauth/admin/authorized-tokens'), 'authorized_tokens');
-        if (!tokens.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No active grants.</td></tr>'; return; }
+        if (!tokens.length) { body.innerHTML = '<tr><td colspan="6" class="empty"><?= $e(trans('oauth2::oauth.admin.empty_grants')) ?></td></tr>'; return; }
         body.innerHTML = tokens.map(t => `<tr>
             <td class="mono trunc" title="${esc(t.id)}">${esc(t.id)}</td>
             <td class="mono">${esc(t.client_id)}</td>
