@@ -569,7 +569,8 @@ final class InMemoryDeviceCodeStore implements DeviceCodeStore
 
     public function consume(string $id): bool
     {
-        return $this->transition($id, DeviceCode::AUTHORIZED, DeviceCode::DENIED);
+        // Redeeming an AUTHORIZED code is a terminal SUCCESS, not a denial.
+        return $this->transition($id, DeviceCode::AUTHORIZED, DeviceCode::REDEEMED);
     }
 
     public function deleteExpired(?\DateTimeImmutable $now = null): int { return 0; }
