@@ -8,8 +8,13 @@ namespace Plugins\OAuth2\Domain\ValueObjects;
  * PKCE (RFC 7636) — Proof Key for Code Exchange.
  *
  * Verifies a `code_verifier` against the `code_challenge` recorded on the
- * authorization request. Supports both methods, but `S256` is REQUIRED for
- * public clients; `plain` is accepted only when the client explicitly used it.
+ * authorization request.
+ *
+ * `S256` is REQUIRED for public clients — enforced in AuthorizationService, not
+ * here, because only that layer knows whether the client is public. `plain`
+ * remains available to confidential clients, which authenticate with a secret;
+ * for a public client it would provide no protection at all, since the
+ * challenge equals the verifier and both cross the front channel.
  */
 final class Pkce
 {

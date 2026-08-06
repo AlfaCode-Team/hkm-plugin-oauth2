@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Plugins\OAuth2\Application\Services;
 
+use AlfacodeTeam\PhpServicePlatform\Kernel\Database\TransactionManager;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Ports\HashingPort;
 use Plugins\OAuth2\Application\Ports\AuthCodeStore;
 use Plugins\OAuth2\Application\Ports\ClientStore;
@@ -36,6 +37,13 @@ final class TokenService
         private readonly ?ResourceOwnerVerifier $owners = null,
         private readonly int $refreshTtl = 1209600, // 14 days
         private readonly ?DeviceCodeStore $devices = null,
+        /**
+         * Wraps refresh-token ROTATION. Optional so the service still works
+         * where no manager is bound, but strongly recommended: without it a
+         * crash between revoking the old token and storing the new one leaves
+         * the user with neither, and the only recovery is to log in again.
+         */
+        private readonly ?TransactionManager $transactions = null,
     ) {
     }
 
@@ -143,24 +151,62 @@ final class TokenService
             $this->refreshTokens->revokeFamily($record->familyId);
             throw OAuthException::invalidGrant('Refresh token is expired or has been revoked.');
         }
-        if (!$this->refreshTokens->revokeIfActive($record->id)) {
-            $this->refreshTokens->revokeFamily($record->familyId);
-            throw OAuthException::invalidGrant('Refresh token reuse detected.');
-        }
+        // ── Rotation is ATOMIC ───────────────────────────────────────────────
+        //
+        // Revoking the presented token and storing its replacement used to be
+        // two independent writes. A crash between them left the user holding a
+        // revoked token and no replacement — stranded, with re-login the only
+        // way out. Worse, two concurrent refreshes (a retry, or two tabs) could
+        // interleave so the second saw the first's revoke and read it as REPLAY,
+        // burning the whole family and logging the user out everywhere.
+        //
+        // Wrapping both in one transaction makes the pair all-or-nothing, and
+        // makes revokeIfActive's compare-and-set the serialisation point.
+        $this->transactions?->begin();
+        $open = $this->transactions !== null;
 
-        // Narrowing scopes is allowed; widening is not.
-        $scopes = $record->scopes;
-        if (($params['scope'] ?? '') !== '') {
-            $requested = $this->scopeValidator->validate($params['scope'], $client);
-            foreach ($requested as $s) {
-                if (!in_array($s, $record->scopes, true)) {
-                    throw OAuthException::invalidScope('Cannot widen scope on refresh.');
+        try {
+            if (!$this->refreshTokens->revokeIfActive($record->id)) {
+                // Genuine replay. Roll back FIRST so the family revoke below is
+                // not swallowed by the rollback.
+                if ($open) {
+                    $this->transactions->rollback();
+                    $open = false;
                 }
-            }
-            $scopes = $requested;
-        }
+                $this->refreshTokens->revokeFamily($record->familyId);
 
-        return $this->issuePair($client, $record->userId, $scopes, $record->familyId);
+                throw OAuthException::invalidGrant('Refresh token reuse detected.');
+            }
+
+            // Narrowing scopes is allowed; widening is not.
+            $scopes = $record->scopes;
+            if (($params['scope'] ?? '') !== '') {
+                $requested = $this->scopeValidator->validate($params['scope'], $client);
+                foreach ($requested as $s) {
+                    if (!in_array($s, $record->scopes, true)) {
+                        // Rolls back the revoke: a bad scope request must not
+                        // cost the caller their working refresh token.
+                        throw OAuthException::invalidScope('Cannot widen scope on refresh.');
+                    }
+                }
+                $scopes = $requested;
+            }
+
+            $pair = $this->issuePair($client, $record->userId, $scopes, $record->familyId);
+
+            if ($open) {
+                $this->transactions->commit();
+                $open = false;
+            }
+
+            return $pair;
+        } catch (\Throwable $e) {
+            if ($open) {
+                $this->transactions->rollback();
+            }
+
+            throw $e;
+        }
     }
 
     private function password(array $params, ?array $basic): array
@@ -210,6 +256,14 @@ final class TokenService
         }
         if ($device->status === DeviceCode::DENIED) {
             throw OAuthException::accessDenied('The user denied the request.');
+        }
+        // A device that polls once more after a successful exchange gets
+        // invalid_grant, per RFC 8628 — NOT access_denied, which would tell a
+        // user who approved and received tokens that they had been rejected.
+        // (The consume() guard below reaches the same outcome; stating it here
+        // keeps the status handling readable.)
+        if ($device->status === DeviceCode::REDEEMED) {
+            throw OAuthException::invalidGrant('Device code already redeemed.');
         }
 
         if ($device->status === DeviceCode::PENDING) {

@@ -90,9 +90,16 @@ final class DeviceCodeRepository implements DeviceCodeStore
     public function consume(string $id): bool
     {
         try {
+            // 'redeemed', not 'denied' — see DeviceCode::REDEEMED. The
+            // status = 'authorized' guard keeps this a single-use
+            // compare-and-set, so a replayed device code still fails.
             return $this->db->execute(
-                "UPDATE oauth_device_codes SET status = 'denied' WHERE id = :id AND status = 'authorized'",
-                ['id' => $id],
+                'UPDATE oauth_device_codes SET status = :redeemed WHERE id = :id AND status = :authorized',
+                [
+                    'redeemed'   => DeviceCode::REDEEMED,
+                    'id'         => $id,
+                    'authorized' => DeviceCode::AUTHORIZED,
+                ],
             ) === 1;
         } catch (\PDOException $e) {
             throw new RepositoryException('Failed to consume device code', layer: 'repository.oauth', previous: $e);

@@ -78,7 +78,11 @@ final class AuthorizationService implements AuthorizationFlow
 
         // PKCE.
         $challenge = trim($params['code_challenge'] ?? '');
+        // RFC 7636 §4.3 makes 'plain' the default when the parameter is absent.
+        // That default is kept for CONFIDENTIAL clients, which authenticate with
+        // a secret, but is rejected for public ones below.
         $method    = trim($params['code_challenge_method'] ?? Pkce::METHOD_PLAIN);
+
         if ($challenge === '') {
             if ($client->isPublic()) {
                 throw OAuthException::invalidRequest('PKCE code_challenge is required for public clients.');
@@ -87,6 +91,19 @@ final class AuthorizationService implements AuthorizationFlow
             $method    = null;
         } elseif (!Pkce::supportsMethod($method)) {
             throw OAuthException::invalidRequest('Unsupported code_challenge_method.');
+        } elseif ($client->isPublic() && $method !== Pkce::METHOD_S256) {
+            // 'plain' makes the challenge IDENTICAL to the verifier, and both
+            // travel through the front channel — so anyone who can observe the
+            // authorization request already holds the verifier and PKCE protects
+            // nothing. A public client has no secret, so PKCE is its only
+            // defence against code interception; S256 is therefore mandatory.
+            //
+            // This also closes an omission attack: the method could simply be
+            // LEFT OUT to fall back to 'plain', downgrading a client that
+            // intended S256.
+            throw OAuthException::invalidRequest(
+                'Public clients must use code_challenge_method=S256; plain provides no protection.',
+            );
         }
 
         return new AuthorizationRequest(

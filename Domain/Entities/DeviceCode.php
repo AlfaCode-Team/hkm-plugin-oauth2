@@ -22,6 +22,18 @@ final class DeviceCode extends Entity
     public const AUTHORIZED = 'authorized';
     public const DENIED     = 'denied';
 
+    /**
+     * Successfully exchanged for tokens — a TERMINAL SUCCESS, distinct from
+     * DENIED.
+     *
+     * consume() used to write DENIED when redeeming an authorized code, so a
+     * device that polled once more after a successful exchange was told
+     * access_denied. The user had approved and received tokens, yet the device
+     * reported rejection. 'redeemed' fits the existing varchar(16) column, so
+     * no migration is required.
+     */
+    public const REDEEMED   = 'redeemed';
+
     /** @param list<string> $scopes */
     public static function of(
         string $id,
