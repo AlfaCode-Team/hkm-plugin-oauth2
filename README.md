@@ -546,6 +546,5 @@ _Part of the HKM Kernel. See also: `docs/ai-context/26_OAUTH2.md`,
 
 ## Documentation
 
-- [CLAUDE.md](CLAUDE.md) — this plugin's contract, config and rules (start here).
 - [docs/OAUTH2.md](docs/OAUTH2.md) — the full OAuth2 reference.
 - [Kernel guides](https://github.com/AlfaCode-Team/hkm-kernel/tree/main/docs/guides) — the framework contracts this plugin builds on.
