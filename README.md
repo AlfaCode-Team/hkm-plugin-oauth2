@@ -543,3 +543,8 @@ Supported `--grant` values: `authorization_code`, `refresh_token`,
 
 _Part of the HKM Kernel. See also: `docs/ai-context/26_OAUTH2.md`,
 `docs/ai-context/25_AUTH.md` (JWT/session/PAT), `docs/ai-context/23_TENANCY.md`._
+
+## Documentation
+
+- [docs/OAUTH2.md](docs/OAUTH2.md) — the full OAuth2 reference.
+- [Kernel guides](https://github.com/AlfaCode-Team/hkm-kernel/tree/main/docs/guides) — the framework contracts this plugin builds on.
