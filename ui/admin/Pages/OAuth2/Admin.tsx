@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth, Head, Link } from "@pageflow/react";
+import { csrfToken, csrfHeaderName } from "@pageflow/core";
 import { toast } from "sonner";
 import { Toaster } from "@ui/sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
@@ -36,6 +37,12 @@ type Result<T> = { ok: true; data: T } | { ok: false };
 async function api(path: string, opts: RequestInit = {}): Promise<any> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (opts.body) headers["Content-Type"] = "application/json";
+  // This console authenticates with the SESSION COOKIE, so every mutating call
+  // is a CSRF candidate and has to carry the platform token. Without it the
+  // /oauth/admin/* routes could only work by being exempted from CSRF entirely
+  // — which also exempted them for an attacker's cross-site form.
+  const token = csrfToken();
+  if (token) headers[csrfHeaderName()] = token;
   const res = await fetch(path, { credentials: "same-origin", headers, ...opts });
   const text = await res.text();
   let body: any = null;
