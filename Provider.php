@@ -38,6 +38,7 @@ use Plugins\OAuth2\Infrastructure\Http\Controllers\JwksController;
 use Plugins\OAuth2\Infrastructure\Http\Controllers\TokenController;
 use Plugins\OAuth2\Infrastructure\Http\Controllers\UserInfoController;
 use Plugins\OAuth2\Infrastructure\Identity\SubjectUserInfoProvider;
+use Plugins\OAuth2\Infrastructure\Identity\UserServiceUserInfoProvider;
 use Plugins\OAuth2\Infrastructure\Identity\UserResourceOwnerVerifier;
 use Plugins\OAuth2\Infrastructure\Persistence\AuthCodeRepository;
 use Plugins\OAuth2\Infrastructure\Persistence\ClientRepository;
@@ -146,6 +147,9 @@ final class Provider implements ModuleContract
                 $c->make(ResourceOwnerVerifier::class),
                 (int) (env('OAUTH_REFRESH_TTL') ?: 1209600),
                 $c->make(DeviceCodeStore::class),
+                // Named so the optional $transactions slot between them keeps its
+                // default rather than being filled by position.
+                userInfo: $c->make(UserInfoProvider::class),
             ));
 
         $container->bindInternal(DeviceService::class, static fn(ModuleContainer $c) =>
@@ -159,8 +163,17 @@ final class Provider implements ModuleContract
 
         // UserInfo (OIDC). Default returns `sub` only; a project may override the
         // UserInfoProvider binding with a richer, scope-aware implementation.
-        $container->bindInternal(UserInfoProvider::class, static fn(ModuleContainer $c) =>
-            new SubjectUserInfoProvider());
+        $container->bindInternal(UserInfoProvider::class, static function (ModuleContainer $c): UserInfoProvider {
+            // This module already requires `user.management`, so the identity
+            // store is normally right there — use it, and emit the profile and
+            // email claims OIDC defines for the granted scopes. Guarded the same
+            // way ResourceOwnerVerifier is, so a deployment that somehow runs
+            // without the User plugin degrades to `sub` instead of failing to
+            // resolve.
+            return $c->has(UserServiceContract::class)
+                ? new UserServiceUserInfoProvider($c->make(UserServiceContract::class))
+                : new SubjectUserInfoProvider();
+        });
 
         $container->bindInternal(IntrospectionService::class, static fn(ModuleContainer $c) =>
             new IntrospectionService(

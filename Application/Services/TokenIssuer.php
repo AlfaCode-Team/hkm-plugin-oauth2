@@ -84,10 +84,19 @@ final class TokenIssuer
      * Mint an OpenID Connect id_token (OIDC Core §2) — issued when the `openid`
      * scope is granted. Signed with the same key as access tokens.
      */
-    public function idToken(string $subject, string $clientId, ?string $nonce = null, ?int $authTime = null): string
-    {
+    /**
+     * @param array<string,mixed> $claims identity claims for the granted scopes
+     *                                    (name, email, …) from the UserInfoProvider
+     */
+    public function idToken(
+        string $subject,
+        string $clientId,
+        ?string $nonce = null,
+        ?int $authTime = null,
+        array $claims = [],
+    ): string {
         $now = time();
-        $payload = array_filter([
+        $reserved = array_filter([
             'iss'       => $this->issuer,
             'sub'       => $subject,
             'aud'       => $clientId,
@@ -96,6 +105,13 @@ final class TokenIssuer
             'auth_time' => $authTime,
             'nonce'     => $nonce,
         ], static fn ($v) => $v !== null);
+
+        // Identity claims go UNDER the reserved set, never over it. The order of
+        // array_merge() is the security control here: a UserInfoProvider that
+        // returned an 'aud', 'exp' or 'sub' key — whether through a bug or
+        // through profile data an attacker controls — would otherwise rewrite
+        // the fields that decide who this token is for and when it dies.
+        $payload = array_merge($claims, $reserved);
 
         $key = $this->isAsymmetric() ? (string) $this->privateKey : $this->secret;
         $kid = ($this->keyId !== null && $this->keyId !== '') ? $this->keyId : null;

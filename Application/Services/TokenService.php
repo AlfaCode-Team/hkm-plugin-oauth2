@@ -10,6 +10,7 @@ use Plugins\OAuth2\Application\Ports\AuthCodeStore;
 use Plugins\OAuth2\Application\Ports\ClientStore;
 use Plugins\OAuth2\Application\Ports\DeviceCodeStore;
 use Plugins\OAuth2\Application\Ports\RefreshTokenStore;
+use Plugins\OAuth2\Application\Ports\UserInfoProvider;
 use Plugins\OAuth2\Application\Ports\ResourceOwnerVerifier;
 use Plugins\OAuth2\Domain\Entities\DeviceCode;
 use Plugins\OAuth2\Domain\Entities\Client;
@@ -44,6 +45,12 @@ final class TokenService
          * the user with neither, and the only recovery is to log in again.
          */
         private readonly ?TransactionManager $transactions = null,
+        /**
+         * Supplies the OIDC identity claims embedded in an id_token. Optional so
+         * the service still works where nothing is bound; null simply means an
+         * id_token carries its reserved fields only.
+         */
+        private readonly ?UserInfoProvider $userInfo = null,
     ) {
     }
 
@@ -315,7 +322,13 @@ final class TokenService
                     'OpenID Connect for public clients requires asymmetric (RS/ES/PS) token signing.'
                 );
             }
-            $idToken = $this->issuer->idToken($userId, $client->id, $nonce);
+            // OIDC Core §5.4: when the identity scopes are granted, their claims
+            // belong in the id_token — that is the whole point of an id_token to
+            // a mobile client, which reads the user's name and email straight
+            // from it instead of spending a round trip on /oauth/userinfo.
+            $claims = $this->userInfo?->claims($userId, $scopes) ?? [];
+
+            $idToken = $this->issuer->idToken($userId, $client->id, $nonce, claims: $claims);
         }
 
         return $this->response($access, $rawRefresh, $scopes, $idToken);

@@ -210,7 +210,7 @@ Everything below is live. `auth` = requires a valid Bearer/session Identity;
 | POST | `/oauth/token` | client | Token endpoint (all grants) |
 | POST | `/oauth/device_authorization` | client | Device grant start → `device_code` + `user_code` |
 | GET/POST | `/oauth/device` | session | Device verification screen (enter `user_code`) |
-| GET | `/oauth/userinfo` | Bearer | OIDC UserInfo (`sub`, …) |
+| GET | `/oauth/userinfo` | Bearer | OIDC UserInfo (`sub` + the granted scopes' claims) |
 | POST | `/oauth/introspect` | client | RFC 7662 token introspection |
 | POST | `/oauth/revoke` | client | RFC 7009 token/family revocation |
 | GET | `/oauth/jwks` | none | Public signing keys (JWK Set) |
@@ -405,7 +405,8 @@ Errors follow RFC 6749: `{ "error": "...", "error_description": "..." }` (e.g.
 ## UserInfo, Introspection, Revocation
 
 ```
-GET  /oauth/userinfo            Authorization: Bearer <access_token>   → { "sub":"…", … }
+GET  /oauth/userinfo            Authorization: Bearer <access_token>
+     → { "sub":"…", "name":"…", "preferred_username":"…", "email":"…", "email_verified":true }
 
 POST /oauth/introspect          token=<token>[&token_type_hint=…]
      → { "active":true, "sub","client_id","scope","exp", … } | { "active":false }
@@ -414,8 +415,30 @@ POST /oauth/revoke              token=<access_or_refresh>   → 200 { "ok": true
      # revokes the refresh-token family and deny-lists the access token's jti
 ```
 
-`/userinfo` returns `sub` by default; a project can bind a richer, scope-aware
-`UserInfoProvider`.
+### Claims
+
+Both `/userinfo` and the `id_token` carry the OIDC Standard Claims for the
+scopes actually granted (Core §5.1, §5.4), read from the platform's own identity
+store via `user.management` — no project wiring:
+
+| Granted scope | Claims |
+|---|---|
+| `openid`  | `sub` |
+| `profile` | `name`, `preferred_username`, `picture` |
+| `email`   | `email`, `email_verified` |
+
+A claim with no value is **omitted**, never sent empty — a consumer can treat any
+present claim as real, instead of rendering a blank display name. `name` and
+`picture` come from the tenant `user_profiles` row, so they are absent until a
+profile exists.
+
+The `id_token` carries the same set, which is what lets a mobile client read the
+user's name and email straight from it rather than spending a round trip on
+`/userinfo`. Identity claims can never overwrite the reserved JWT fields
+(`iss`, `sub`, `aud`, `exp`, `iat`, `nonce`, `auth_time`).
+
+To change the mapping, bind your own `UserInfoProvider`; where the User plugin is
+absent the binding falls back to `SubjectUserInfoProvider` (`sub` only).
 
 ---
 
