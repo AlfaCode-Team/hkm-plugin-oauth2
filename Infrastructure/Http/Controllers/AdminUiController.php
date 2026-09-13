@@ -34,7 +34,7 @@ final class AdminUiController
         $identity = $request->identity();
 
         if ($identity === null || $identity->isGuest()) {
-            return Response::redirect('/login?return=' . urlencode('/oauth/admin/simulate'));
+            return Response::redirect('/login?redirectTo=' . urlencode('/oauth/admin/simulate'));
         }
 
         if (!$this->isOAuthAdmin($identity)) {
@@ -49,7 +49,7 @@ final class AdminUiController
         $identity = $request->identity();
 
         if ($identity === null || $identity->isGuest()) {
-            return Response::redirect('/login?return=' . urlencode('/oauth/admin'));
+            return Response::redirect('/login?redirectTo=' . urlencode('/oauth/admin'));
         }
 
         if (!$this->isOAuthAdmin($identity)) {

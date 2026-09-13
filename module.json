@@ -83,12 +83,18 @@
         {
             "method": "GET",
             "path": "/oauth/device",
-            "handler": "Plugins\\OAuth2\\Infrastructure\\Http\\Controllers\\DeviceVerificationController@show"
+            "handler": "Plugins\\OAuth2\\Infrastructure\\Http\\Controllers\\DeviceVerificationController@show",
+            "filters": [
+                "throttle:20,1"
+            ]
         },
         {
             "method": "POST",
             "path": "/oauth/device",
-            "handler": "Plugins\\OAuth2\\Infrastructure\\Http\\Controllers\\DeviceVerificationController@submit"
+            "handler": "Plugins\\OAuth2\\Infrastructure\\Http\\Controllers\\DeviceVerificationController@submit",
+            "filters": [
+                "throttle:10,1"
+            ]
         },
         {
             "method": "GET",

@@ -31,7 +31,15 @@ final class DeviceVerificationController extends ViewController
         $request  = $this->resolveRequest();
         $identity = $request->identity();
         if ($identity === null || $identity->isGuest()) {
-            return $this->redirect('/login?return=' . urlencode((string) $request->uri()));
+            // Auth's login reads `redirectTo` (not `return`), and its open-redirect
+            // guard accepts only a RELATIVE path — so hand it path+query, never the
+            // absolute URL, exactly as AuthorizationController does. The previous
+            // form named a parameter nothing reads AND passed a value the guard
+            // would have rejected, so the user_code was lost across the login hop.
+            $query  = $request->uri()->getQuery();
+            $target = $request->path() . ($query !== '' ? '?' . $query : '');
+
+            return $this->redirect('/login?redirectTo=' . urlencode($target));
         }
 
         return $this->view('oauth2::device', [

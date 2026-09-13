@@ -216,7 +216,9 @@ $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 </div>
 
 <script>
-const RETURN = encodeURIComponent('/oauth/admin');
+// Auth's login reads `redirectTo`, not `return`, and its open-redirect guard
+// accepts only a relative path.
+const REDIRECT_TO = encodeURIComponent('/oauth/admin');
 document.getElementById('host').textContent = location.host;
 
 function toast(msg, type, detail) {
@@ -234,7 +236,7 @@ async function api(path, opts) {
     const headers = { 'Accept': 'application/json' };
     if (opts.body) headers['Content-Type'] = 'application/json';
     const res = await fetch(path, { credentials: 'same-origin', headers, ...opts });
-    if (res.status === 401) { location.href = '/login?return=' + RETURN; throw new Error('unauthorized'); }
+    if (res.status === 401) { location.href = '/login?redirectTo=' + REDIRECT_TO; throw new Error('unauthorized'); }
     if (res.status === 403) { document.getElementById('banner').style.display = 'block';
         document.getElementById('banner').textContent = '403 — your account is not an OAuth2 admin. Add user id ' +
             <?= json_encode($userId) ?> + ' to OAUTH_ADMIN_USERS in the backend .env.'; }
