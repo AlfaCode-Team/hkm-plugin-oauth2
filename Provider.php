@@ -6,6 +6,7 @@ namespace Plugins\OAuth2;
 
 use AlfacodeTeam\PhpServicePlatform\Kernel\Container\ModuleContainer;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Contracts\ModuleContract;
+use AlfacodeTeam\PhpServicePlatform\Kernel\Database\TransactionManager;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Events\EventBus;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Pipelines\Cli\CliPipeline;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Pipelines\Http\HttpPipeline;
@@ -147,8 +148,13 @@ final class Provider implements ModuleContract
                 $c->make(ResourceOwnerVerifier::class),
                 (int) (env('OAUTH_REFRESH_TTL') ?: 1209600),
                 $c->make(DeviceCodeStore::class),
-                // Named so the optional $transactions slot between them keeps its
-                // default rather than being filled by position.
+                // Refresh-token ROTATION revokes the presented token and stores
+                // its successor. Without a manager those are two independent
+                // writes: a crash between them strands the user with neither,
+                // and the invalid_scope path cannot roll back the revoke it
+                // promises to. The kernel binds this — it was simply never
+                // passed, so every deployment ran the non-atomic path.
+                $c->make(TransactionManager::class),
                 userInfo: $c->make(UserInfoProvider::class),
             ));
 

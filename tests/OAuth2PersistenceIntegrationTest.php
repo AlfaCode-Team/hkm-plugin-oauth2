@@ -6,6 +6,7 @@ namespace Tests\Unit\Plugins\OAuth2;
 
 use AlfacodeTeam\PhpServicePlatform\Kernel\Ports\HashingPort;
 use PHPUnit\Framework\TestCase;
+use AlfacodeTeam\PhpServicePlatform\Kernel\Database\TransactionManager;
 use Plugins\Database\Infrastructure\Drivers\SQLiteConfiguration;
 use Plugins\Database\Infrastructure\Persistence\MultiDriverDatabaseAdapter;
 use Plugins\OAuth2\Application\Services\AuthorizationService;
@@ -56,7 +57,7 @@ final class OAuth2PersistenceIntegrationTest extends TestCase
         $issuer        = new TokenIssuer('HS256', str_repeat('k', 64), null, 'https://issuer.test', null, 3600);
 
         $this->authz     = new AuthorizationService($this->clients, $codes, $scopeV, 60);
-        $this->tokens    = new TokenService($this->clients, $codes, $refresh, $scopeV, $issuer, $hasher, null, 1209600, $this->devices);
+        $this->tokens    = new TokenService($this->clients, $codes, $refresh, $scopeV, $issuer, $hasher, null, 1209600, $this->devices, new TransactionManager($this->db));
         $this->deviceSvc = new DeviceService($this->clients, $this->devices, $scopeV, 600, 5);
 
         // Seed scopes + clients.
@@ -92,6 +93,35 @@ final class OAuth2PersistenceIntegrationTest extends TestCase
             'grant_type' => 'authorization_code', 'client_id' => 'public-spa',
             'code' => $q['code'], 'redirect_uri' => self::REDIRECT, 'code_verifier' => $verifier,
         ], null);
+    }
+
+    public function test_a_rejected_scope_widening_does_not_cost_the_caller_their_refresh_token(): void
+    {
+        $refresh = $this->mintViaAuthCode()['refresh_token'];
+
+        // Rotation revokes the presented token BEFORE it validates the requested
+        // scope, so this throw happens with the revoke already written. Only a
+        // real transaction puts it back.
+        try {
+            $this->tokens->handle([
+                'grant_type' => 'refresh_token', 'client_id' => 'public-spa',
+                'refresh_token' => $refresh, 'scope' => 'openid',   // never granted
+            ], null);
+            self::fail('Widening the scope on refresh should have been rejected.');
+        } catch (OAuthException $e) {
+            self::assertSame('invalid_scope', $e->error);
+        }
+
+        // The caller asked for the wrong scope — that must not log them out. Before
+        // the TransactionManager was wired, the revoke stuck and this second call
+        // failed with invalid_grant, leaving re-login as the only recovery.
+        $rotated = $this->tokens->handle([
+            'grant_type' => 'refresh_token', 'client_id' => 'public-spa',
+            'refresh_token' => $refresh,
+        ], null);
+
+        self::assertNotEmpty($rotated['access_token']);
+        self::assertNotSame($refresh, $rotated['refresh_token']);
     }
 
     public function test_refresh_rotation_reuse_detection_against_real_db(): void
