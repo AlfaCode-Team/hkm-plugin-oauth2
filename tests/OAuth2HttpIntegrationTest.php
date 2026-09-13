@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Unit\Plugins\OAuth2;
 
 use AlfacodeTeam\PhpServicePlatform\Kernel\Http\Request;
+use AlfacodeTeam\PhpServicePlatform\Kernel\Ports\CachePort;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Ports\HashingPort;
+use AlfacodeTeam\PhpServicePlatform\Kernel\Ports\Lock;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use PHPUnit\Framework\TestCase;
@@ -45,6 +47,7 @@ final class OAuth2HttpIntegrationTest extends TestCase
     private AuthorizationService $authz;
     private TokenController $tokenController;
     private IntrospectionController $introspectController;
+    private CachePort $revocations;
     private JwksController $jwksController;
     private DiscoveryController $discoveryController;
 
@@ -82,7 +85,26 @@ final class OAuth2HttpIntegrationTest extends TestCase
 
         $this->authz          = new AuthorizationService($clients, $codes, $scopeV, 60);
         $tokenService         = new TokenService($clients, $codes, $refresh, $scopeV, $issuer, $hasher, null, 1209600, $devices);
-        $introspection        = new IntrospectionService($refresh, $issuer, $this->publicKey, self::ALGO);
+        $this->revocations = new class implements CachePort {
+            /** @var array<string,mixed> */
+            public array $store = [];
+            public function get(string $key): mixed { return $this->store[$key] ?? null; }
+            public function set(string $key, mixed $value, ?int $ttl = null): bool { $this->store[$key] = $value; return true; }
+            public function delete(string $key): bool { unset($this->store[$key]); return true; }
+            public function has(string $key): bool { return array_key_exists($key, $this->store); }
+            public function remember(string $key, int $ttl, callable $callback): mixed { return $this->store[$key] ??= $callback(); }
+            public function increment(string $key, int $by = 1): int { return $this->store[$key] = (int) ($this->store[$key] ?? 0) + $by; }
+            public function deletePattern(string $pattern): int { return 0; }
+            public function flush(): bool { $this->store = []; return true; }
+            // IntrospectionService only ever reads and writes the deny-list key;
+            // a lock here would mean the contract grew a dependency it does not have.
+            public function lock(string $name, int $seconds = 0, ?string $owner = null): Lock
+            { throw new \LogicException('Locks are not used by IntrospectionService.'); }
+            public function restoreLock(string $name, string $owner): Lock
+            { throw new \LogicException('Locks are not used by IntrospectionService.'); }
+        };
+
+        $introspection        = new IntrospectionService($refresh, $issuer, $this->publicKey, self::ALGO, $this->revocations);
 
         $this->tokenController       = (new TokenController($tokenService));
         $this->introspectController  = (new IntrospectionController($introspection, $clients, $hasher));
@@ -94,6 +116,9 @@ final class OAuth2HttpIntegrationTest extends TestCase
         }
         $clients->create('web-app', 'Web', 'h:websecret', [self::REDIRECT], ['authorization_code', 'refresh_token'], ['profile', 'openid'], true);
         $clients->create('svc', 'Service', 'h:svcsecret', [], ['client_credentials'], ['reports'], true);
+        // A SECOND confidential client — any authenticated user can register one,
+        // which is what makes the token-ownership checks below load-bearing.
+        $clients->create('nosy', 'Nosy', 'h:nosysecret', [], ['client_credentials'], ['reports'], true);
     }
 
     public function test_client_credentials_over_basic_auth_returns_token(): void
@@ -191,6 +216,78 @@ final class OAuth2HttpIntegrationTest extends TestCase
         self::assertStringContainsString('/oauth/userinfo', $doc['userinfo_endpoint']);
         self::assertContains(self::ALGO, $doc['id_token_signing_alg_values_supported']);
         self::assertContains('openid', $doc['scopes_supported']);
+    }
+
+    public function test_introspection_reports_inactive_once_the_token_is_revoked(): void
+    {
+        $token = $this->accessTokenFor('svc', 'svcsecret');
+
+        // Same client, same token: active before the revocation.
+        self::assertTrue($this->introspectBody($token, 'svc', 'svcsecret')['active']);
+
+        $this->drive($this->introspectController, 'revoke', $this->post('/oauth/revoke', [
+            'token' => $token,
+        ], basic: ['svc', 'svcsecret']));
+
+        // The signature is still valid and the token has not expired — only the
+        // deny-list says otherwise, and introspection has to consult it. This is
+        // the regression that let a revoked token keep authenticating against any
+        // resource server that validates by introspection.
+        self::assertFalse($this->introspectBody($token, 'svc', 'svcsecret')['active']);
+    }
+
+    public function test_revocation_writes_the_same_deny_list_key_the_platform_reads(): void
+    {
+        $token  = $this->accessTokenFor('svc', 'svcsecret');
+        $claims = (array) JWT::decode($token, new Key($this->publicKey, self::ALGO));
+
+        $this->drive($this->introspectController, 'revoke', $this->post('/oauth/revoke', [
+            'token' => $token,
+        ], basic: ['svc', 'svcsecret']));
+
+        // Mirrors Plugins\Auth\Security\JwtAuthLayer::revocationKey(). If this
+        // prefix ever drifts, revocation silently stops working across the seam.
+        self::assertTrue($this->revocations->has('auth:jwt:revoked:' . $claims['jti']));
+    }
+
+    public function test_introspection_hides_a_token_issued_to_another_client(): void
+    {
+        $token = $this->accessTokenFor('svc', 'svcsecret');
+
+        // `nosy` authenticates correctly — it just does not own this token.
+        $body = $this->introspectBody($token, 'nosy', 'nosysecret');
+
+        self::assertFalse($body['active']);
+        self::assertArrayNotHasKey('sub', $body);   // and leaks nothing about it
+    }
+
+    public function test_revoke_will_not_kill_a_token_issued_to_another_client(): void
+    {
+        $token = $this->accessTokenFor('svc', 'svcsecret');
+
+        $resp = $this->drive($this->introspectController, 'revoke', $this->post('/oauth/revoke', [
+            'token' => $token,
+        ], basic: ['nosy', 'nosysecret']));
+
+        // RFC 7009 §2.2 — still a success, so the caller learns nothing...
+        self::assertSame(200, $resp->getStatusCode());
+        // ...but the token is untouched and its owner can still use it.
+        self::assertTrue($this->introspectBody($token, 'svc', 'svcsecret')['active']);
+    }
+
+    private function accessTokenFor(string $clientId, string $secret): string
+    {
+        return json_decode($this->drive($this->tokenController, 'issue', $this->post('/oauth/token', [
+            'grant_type' => 'client_credentials', 'scope' => 'reports',
+        ], basic: [$clientId, $secret]))->getContent(), true)['access_token'];
+    }
+
+    /** @return array<string,mixed> */
+    private function introspectBody(string $token, string $clientId, string $secret): array
+    {
+        return json_decode($this->drive($this->introspectController, 'introspect', $this->post('/oauth/introspect', [
+            'token' => $token,
+        ], basic: [$clientId, $secret]))->getContent(), true);
     }
 
     protected function tearDown(): void

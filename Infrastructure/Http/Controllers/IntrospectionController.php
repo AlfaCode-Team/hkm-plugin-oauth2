@@ -9,6 +9,7 @@ use AlfacodeTeam\PhpServicePlatform\Kernel\Http\Response;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Ports\HashingPort;
 use Plugins\OAuth2\Application\Ports\ClientStore;
 use Plugins\OAuth2\Application\Services\IntrospectionService;
+use Plugins\OAuth2\Domain\Entities\Client;
 use Plugins\OAuth2\Domain\Exceptions\OAuthException;
 use Plugins\OAuth2\Infrastructure\Http\Concerns\SpeaksOAuth;
 use Project\Http\Controllers\ApiController;
@@ -34,12 +35,15 @@ final class IntrospectionController extends ApiController
     {
         $request = $this->resolveRequest();
         try {
-            $this->authenticateClient($request);
+            $client = $this->authenticateClient($request);
         } catch (OAuthException $e) {
             return $this->oauthError($e);
         }
 
-        $result = $this->introspection->introspect(trim((string) $request->input('token')));
+        $result = $this->introspection->introspect(
+            trim((string) $request->input('token')),
+            (string) $client->id,
+        );
 
         return $this->noStore(Response::json($result));
     }
@@ -48,18 +52,27 @@ final class IntrospectionController extends ApiController
     {
         $request = $this->resolveRequest();
         try {
-            $this->authenticateClient($request);
+            $client = $this->authenticateClient($request);
         } catch (OAuthException $e) {
             return $this->oauthError($e);
         }
 
-        $this->introspection->revoke(trim((string) $request->input('token')));
+        $this->introspection->revoke(
+            trim((string) $request->input('token')),
+            (string) $client->id,
+        );
 
         // RFC 7009 §2.2 — success regardless of whether the token existed.
         return $this->noStore(Response::json(['ok' => true]));
     }
 
-    private function authenticateClient(Request $request): void
+    /**
+     * Returns the authenticated client rather than just asserting one exists:
+     * both endpoints must compare it against the token's owner (RFC 7009 §2.1),
+     * and a method that proved the caller's identity and then discarded it made
+     * that check easy to forget — which is exactly what had happened.
+     */
+    private function authenticateClient(Request $request): Client
     {
         $basic = $this->basicClient($request);
         [$clientId, $secret] = $basic ?? [trim((string) $request->input('client_id')), (string) $request->input('client_secret')];
@@ -69,5 +82,7 @@ final class IntrospectionController extends ApiController
             || !$this->hasher->check((string) $secret, $client->secretHash)) {
             throw OAuthException::invalidClient();
         }
+
+        return $client;
     }
 }
