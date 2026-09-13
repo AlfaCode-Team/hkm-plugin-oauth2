@@ -6,6 +6,7 @@ namespace Plugins\OAuth2\Infrastructure\Cli;
 
 use AlfacodeTeam\PhpIoCli\AbstractCommand;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Ports\HashingPort;
+use Plugins\OAuth2\Domain\ValueObjects\RedirectUri;
 use Plugins\OAuth2\Infrastructure\Cli\Concerns\TargetsTenant;
 use Plugins\OAuth2\Infrastructure\Persistence\ClientRepository;
 
@@ -60,6 +61,15 @@ final class CreateClientCommand extends AbstractCommand
 
         if (in_array('authorization_code', $grantTypes, true) && $redirects === []) {
             $this->error('authorization_code requires at least one --redirect URI.');
+            return self::FAILURE;
+        }
+
+        // Same rule the HTTP registration endpoints enforce — a client provisioned
+        // from the CLI must not be able to hold a redirect target the server would
+        // have refused through the API.
+        if ($bad = RedirectUri::invalidIn($redirects)) {
+            $this->error('Not usable as a redirect URI: ' . implode(', ', $bad));
+            $this->info('Use https, http on localhost, or a private-use scheme for a native app.');
             return self::FAILURE;
         }
 

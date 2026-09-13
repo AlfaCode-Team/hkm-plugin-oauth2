@@ -92,6 +92,36 @@ final class ClientManagementTest extends TestCase
         self::assertFalse($store->find('c-other')->revoked); // untouched
     }
 
+    public function test_store_refuses_a_redirect_uri_that_could_never_receive_a_code(): void
+    {
+        $store = $this->store();
+
+        $response = $this->controller($store, Identity::asUser('u1', ''), [
+            'name'          => 'Sketchy',
+            'redirect_uris' => ['https://ok.example.com/cb', 'javascript:alert(1)'],
+        ])->store();
+
+        self::assertSame(422, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        // The offending entry is named, so the registrant knows which of the two to fix.
+        self::assertStringContainsString('javascript:alert(1)', $body['error']['fields']['redirect_uris']);
+        // And nothing was written.
+        self::assertSame([], $store->all());
+    }
+
+    public function test_store_accepts_the_redirect_shapes_a_real_client_uses(): void
+    {
+        $store = $this->store();
+
+        $response = $this->controller($store, Identity::asUser('u1', ''), [
+            'name'          => 'Legit',
+            'redirect_uris' => ['https://app.example.com/cb', 'http://127.0.0.1:8765/cb', 'com.example.app:/cb'],
+        ])->store();
+
+        self::assertSame(201, $response->getStatusCode());
+        self::assertCount(3, $store->all()[0]->redirectUris);
+    }
+
     public function test_guest_cannot_manage_clients(): void
     {
         self::assertSame(401, $this->controller($this->store(), Identity::guest())->forUser()->getStatusCode());

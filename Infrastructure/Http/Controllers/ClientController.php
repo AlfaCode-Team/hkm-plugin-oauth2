@@ -7,6 +7,7 @@ namespace Plugins\OAuth2\Infrastructure\Http\Controllers;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Http\Response;
 use AlfacodeTeam\PhpServicePlatform\Kernel\Ports\HashingPort;
 use Plugins\OAuth2\Application\Ports\ClientStore;
+use Plugins\OAuth2\Domain\ValueObjects\RedirectUri;
 use Project\Http\Controllers\ApiController;
 
 /**
@@ -61,6 +62,10 @@ final class ClientController extends ApiController
         $scopes    = $this->list($this->request?->input('scopes', []));
         $public    = $this->request?->boolean('public') ?? false;
 
+        if ($bad = RedirectUri::invalidIn($redirects)) {
+            return $this->unprocessable(['redirect_uris' => $this->redirectError($bad)]);
+        }
+
         $id         = bin2hex(random_bytes(16));
         $secret     = null;
         $secretHash = null;
@@ -104,6 +109,10 @@ final class ClientController extends ApiController
         $redirects = $this->list($this->request?->input('redirect_uris', $client->redirectUris ?? []));
         $scopes    = $this->list($this->request?->input('scopes', $client->scopes ?? []));
 
+        if ($bad = RedirectUri::invalidIn($redirects)) {
+            return $this->unprocessable(['redirect_uris' => $this->redirectError($bad)]);
+        }
+
         $this->clients->updateDetails($id, $name, $redirects, $scopes);
 
         return $this->ok($this->clients->find($id)?->toPublicArray() ?? []);
@@ -137,5 +146,17 @@ final class ClientController extends ApiController
     private function list(mixed $value): array
     {
         return is_array($value) ? array_values(array_filter($value, 'is_string')) : [];
+    }
+
+    /**
+     * Name the offending entries AND the rule, so the registrant can fix it
+     * without guessing which of several URIs the server objected to.
+     *
+     * @param list<string> $bad
+     */
+    private function redirectError(array $bad): string
+    {
+        return 'Not usable as a redirect URI: ' . implode(', ', $bad)
+            . '. Use https, http on localhost, or a private-use scheme for a native app.';
     }
 }

@@ -11,6 +11,7 @@ use Plugins\OAuth2\Application\Ports\RefreshTokenStore;
 use Plugins\OAuth2\Application\Ports\ScopeStore;
 use Plugins\OAuth2\Domain\Entities\Client;
 use Plugins\OAuth2\Domain\ValueObjects\GrantType;
+use Plugins\OAuth2\Domain\ValueObjects\RedirectUri;
 use Plugins\OAuth2\Infrastructure\Http\Concerns\ChecksOAuthAdmin;
 use Plugins\User\API\Contracts\UserServiceContract;
 use Project\Http\Controllers\ApiController;
@@ -100,6 +101,9 @@ final class AdminController extends ApiController
         if (in_array('authorization_code', $grants, true) && $redirects === []) {
             return $this->unprocessable(['redirect_uris' => 'authorization_code requires at least one redirect URI.']);
         }
+        if ($bad = RedirectUri::invalidIn($redirects)) {
+            return $this->unprocessable(['redirect_uris' => $this->redirectError($bad)]);
+        }
 
         // Every requested scope must exist in the catalogue (add them in Scopes first).
         $missing = $this->missingScopes($scopes);
@@ -146,6 +150,10 @@ final class AdminController extends ApiController
 
         $redirects = $this->list($this->request?->input('redirect_uris', $client->redirectUris ?? []));
         $scopes    = $this->list($this->request?->input('scopes', $client->scopes ?? []));
+
+        if ($bad = RedirectUri::invalidIn($redirects)) {
+            return $this->unprocessable(['redirect_uris' => $this->redirectError($bad)]);
+        }
 
         $missing = $this->missingScopes($scopes);
         if ($missing !== []) {
@@ -274,6 +282,18 @@ final class AdminController extends ApiController
     private function list(mixed $value): array
     {
         return is_array($value) ? array_values(array_filter($value, 'is_string')) : [];
+    }
+
+    /**
+     * Name the offending entries AND the rule, so an admin can fix the payload
+     * without guessing which of several URIs the server objected to.
+     *
+     * @param list<string> $bad
+     */
+    private function redirectError(array $bad): string
+    {
+        return 'Not usable as a redirect URI: ' . implode(', ', $bad)
+            . '. Use https, http on localhost, or a private-use scheme for a native app.';
     }
 
     /**
